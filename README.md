@@ -1,1 +1,2 @@
- # Code for Effective and Semantic communication
+# Code for Progressive Goal-oriented Communications for Reinforcement Learning Control over Multi-tier Computing Systems
+This repository is the implementation of MLVE for the DeepMind control experiments. Atari experiments were done in a separate codebase available here. Our implementation of SAC is based on SAC+AE by Denis Yarats.

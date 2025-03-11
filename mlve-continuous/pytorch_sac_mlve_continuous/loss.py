@@ -5,8 +5,7 @@ import torch.nn as nn
 
 
 class ContrasLoss(nn.Module):
-    """Supervised Contrastive Learning: https://arxiv.org/pdf/2004.11362.pdf.
-    It also supports the unsupervised contrastive loss in SimCLR"""
+    """Based on Supervised Contrastive Learning: https://arxiv.org/pdf/2004.11362.pdf."""
     def __init__(self, temperature=0.07, t=0.005):
         super(ContrasLoss, self).__init__()
         self.temperature = temperature
@@ -18,7 +17,7 @@ class ContrasLoss(nn.Module):
         bs, n = states.shape
         phi_ij = torch.matmul(actions, torch.ones_like(actions).T) - torch.matmul(torch.ones_like(actions), actions.T) + 1e-8
         phi_ij = torch.exp(-(phi_ij ** 2))
-        phi_ij = torch.sigmoid(phi_ij) * self.t + self.temperature  # 温度的值从0.07到0.075
+        phi_ij = torch.sigmoid(phi_ij) * self.t + self.temperature
 
         s_ij = torch.matmul(states, states.T)
 

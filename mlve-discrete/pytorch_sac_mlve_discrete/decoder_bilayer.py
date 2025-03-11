@@ -16,10 +16,10 @@ class PixelDecoder(nn.Module):
         self.fc = []
         self.z_mean = []
         for i in range(3):
-            self.fc.append(nn.Linear(feature_dim, num_filters * self.out_dim[i] * self.out_dim[i]))
+            self.fc.append(nn.Linear(feature_dim, num_filters * OUT_DIM[(i+1)*2] * OUT_DIM[(i+1)*2]))
             if i !=2:
                 # predict z1 and z2
-                self.z_mean.append(nn.Sequential(nn.Linear(num_filters * self.out_dim[i] * self.out_dim[i], self.feature_dim),
+                self.z_mean.append(nn.Sequential(nn.Linear(num_filters * OUT_DIM[(i+1)*2] * OUT_DIM[(i+1)*2], self.feature_dim),
                                     nn.LayerNorm(self.feature_dim, elementwise_affine=False)))
 
         self.deconvs = nn.ModuleList()
@@ -38,7 +38,7 @@ class PixelDecoder(nn.Module):
 
     def get_obs_from_z1(self, z1):
         h1 = torch.relu(self.fc[0](z1))
-        deconv = h1.view(-1, self.num_filters, self.out_dim[0], self.out_dim[0])
+        deconv = h1.view(-1, self.num_filters, OUT_DIM[2], OUT_DIM[2])
         for i in range(4, self.num_layers - 1):
             deconv = torch.relu(self.deconvs[i](deconv))
         obs = self.deconvs[-1](deconv)
@@ -46,7 +46,7 @@ class PixelDecoder(nn.Module):
     
     def get_obs_from_z2(self, z2, forward=False):
         h2 = self.fc[1](z2)
-        deconv = h2.view(-1, self.num_filters, self.out_dim[1], self.out_dim[1])
+        deconv = h2.view(-1, self.num_filters, OUT_DIM[4], OUT_DIM[4])
         for i in range(2, 4):
             deconv = torch.relu(self.deconvs[i](deconv))
         deconv = deconv.view(deconv.size(0), -1)

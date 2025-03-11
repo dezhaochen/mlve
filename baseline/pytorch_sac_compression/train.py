@@ -3,7 +3,7 @@ import torch
 import argparse
 import os
 os.environ['MUJOCO_GL'] = 'egl'
-
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 import math
 import gym
 import sys
@@ -27,7 +27,6 @@ import objgraph
 
 from compressai.zoo import cheng2020_anchor
 
-# xvfb-run -a -s "-screen 0 640x480x24"
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -41,12 +40,12 @@ def parse_args():
     parser.add_argument('--replay_buffer_capacity', default=100000, type=int)
     # train
     parser.add_argument('--agent', default='sac_ae', type=str)
-    parser.add_argument('--init_steps', default=1000, type=int)#1000 0
-    parser.add_argument('--num_train_steps', default=520000, type=int)#310000
+    parser.add_argument('--init_steps', default=1000, type=int)
+    parser.add_argument('--num_train_steps', default=520000, type=int)
     parser.add_argument('--batch_size', default=128, type=int)
     parser.add_argument('--hidden_dim', default=1024, type=int)
     # eval
-    parser.add_argument('--eval_freq', default=10000, type=int)#10000 2000
+    parser.add_argument('--eval_freq', default=10000, type=int)
     parser.add_argument('--num_eval_episodes', default=10, type=int)
     # critic
     parser.add_argument('--critic_lr', default=1e-3, type=float)
@@ -61,7 +60,7 @@ def parse_args():
     parser.add_argument('--actor_update_freq', default=2, type=int)
     # encoder/decoder
     parser.add_argument('--encoder_type', default='pixel', type=str)
-    parser.add_argument('--encoder_feature_dim', default=100, type=int)#50
+    parser.add_argument('--encoder_feature_dim', default=100, type=int)
     parser.add_argument('--encoder_lr', default=1e-3, type=float)
     parser.add_argument('--encoder_tau', default=0.05, type=float)
     parser.add_argument('--decoder_type', default='pixel', type=str)
@@ -86,7 +85,6 @@ def parse_args():
     parser.add_argument('--save_video', default=False, action='store_true')
 
     parser.add_argument('--quality',default=1,type=int)
-
     parser.add_argument('--cp_method',default=None,type=str)
 
     args = parser.parse_args()
@@ -152,10 +150,9 @@ def make_agent(obs_shape, action_shape, args, device):
 
 def main():
     args = parse_args()
-    os.environ["CUDA_VISIBLE_DEVICES"] = f"{args.device}"
+
     args.seed = np.random.randint(0, 1000)
     print(args.seed)
-    print(args.quality)
 
     if args.cp_method == 'compressai':
         net = cheng2020_anchor(quality=args.quality, pretrained=True).eval().to(device)

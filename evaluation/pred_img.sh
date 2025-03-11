@@ -1,1 +1,0 @@
-(nohup python -u pred_image.py > ./pred_image_z1.log 2>&1 ) &

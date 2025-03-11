@@ -11,9 +11,6 @@ from encoder_pixel_Q import make_encoder
 
 LOG_FREQ = 10000
 
-"""
-PixelRL
-"""
 
 def gaussian_logprob(noise, log_std):
     """Compute Gaussian log probability."""
@@ -181,8 +178,6 @@ class Critic(nn.Module):
         if step % log_freq != 0:
             return
 
-        # self.encoder.log(L, step, log_freq)
-
         for k, v in self.outputs.items():
             L.log_histogram('train_critic/%s_hist' % k, v, step)
 
@@ -271,9 +266,9 @@ class SacAeAgent(object):
         parameters_to_exclude = []
         for param in parameters_to_optimize:
             if param is self.critic.encoder.entropy_bottleneck.quantiles:
-                parameters_to_exclude.append(param)  # 不需要优化的参数
+                parameters_to_exclude.append(param)
             else:
-                parameters_to_update.append(param)  # 需要优化的参数
+                parameters_to_update.append(param)
         self.critic_optimizer = torch.optim.Adam(
             parameters_to_update, lr=critic_lr, betas=(critic_beta, 0.999)
         )
@@ -329,7 +324,7 @@ class SacAeAgent(object):
         critic_loss = F.mse_loss(current_Q1,
                                  target_Q) + F.mse_loss(current_Q2, target_Q)
         
-        # 计算码率损失
+        # bpp loss
         N, _, H, W = obs.size()
         num_pixels = N * H * W * 3
         bpp = (torch.log(obs_likelihoods).sum() / (-math.log(2) * num_pixels))
@@ -349,8 +344,6 @@ class SacAeAgent(object):
         self.critic_optimizer.step()
         self.aux_optimizer.step()
 
-        # self.critic.log(L, step)
-
     def update_actor_and_alpha(self, obs, L, step):
         # detach encoder, so we don't update it with the actor loss
         _, pi, log_pi, log_std = self.actor(obs, detach_encoder=True)
@@ -369,8 +362,6 @@ class SacAeAgent(object):
         self.actor_optimizer.zero_grad()
         actor_loss.backward()
         self.actor_optimizer.step()
-
-        # self.actor.log(L, step)
 
         self.log_alpha_optimizer.zero_grad()
         alpha_loss = (self.alpha *

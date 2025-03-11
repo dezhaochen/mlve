@@ -25,8 +25,6 @@ import objgraph
 
 from skimage.metrics import peak_signal_noise_ratio as psnr
 
-# xvfb-run -a -s "-screen 0 640x480x24"
-
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -40,7 +38,7 @@ def parse_args():
     parser.add_argument('--replay_buffer_capacity', default=100000, type=int)
     # train
     parser.add_argument('--agent', default='sac_ae', type=str)
-    parser.add_argument('--init_steps', default=1000, type=int)#1000 0
+    parser.add_argument('--init_steps', default=1000, type=int)
     parser.add_argument('--num_train_steps', default=520000, type=int)
     parser.add_argument('--batch_size', default=128, type=int)
     parser.add_argument('--hidden_dim', default=1024, type=int)
@@ -60,13 +58,14 @@ def parse_args():
     parser.add_argument('--actor_update_freq', default=2, type=int)
     # encoder/decoder
     parser.add_argument('--encoder_type', default='pixel', type=str)
-    parser.add_argument('--encoder_feature_dim', default=100, type=int)#50
+    parser.add_argument('--encoder_feature_dim', default=100, type=int)
     parser.add_argument('--encoder_lr', default=1e-3, type=float)
     parser.add_argument('--encoder_tau', default=0.05, type=float)
     parser.add_argument('--decoder_type', default='pixel', type=str)
     parser.add_argument('--decoder_lr', default=1e-3, type=float)
     parser.add_argument('--decoder_update_freq', default=1, type=int)
-    parser.add_argument('--decoder_latent_lambda', default=1e-6, type=float)
+    parser.add_argument('--lambdaD', default=1e-6, type=float)
+    parser.add_argument('--lambdaE', default=1e-8, type=float)
     parser.add_argument('--decoder_weight_lambda', default=1e-7, type=float)
     parser.add_argument('--num_layers', default=6, type=int)
     parser.add_argument('--num_filters', default=32, type=int)
@@ -95,24 +94,17 @@ def evaluate(env, agent, video, num_episodes, L, step, testpsnr=False):
         video.init(enabled=(i == 0))
         done = False
         episode_reward = 0
-        episode_psnr_z1 = []
-        episode_psnr_z2 = []
-        episode_psnr_z3 = []
+        episode_psnr = [[] for _ in range(3)]
+        
         while not done:
             with utils.eval_mode(agent):
                 action, z = agent.select_action(obs, test=True)
-            if testpsnr:
-                # compute PSNR
-                obs_from_z1 = agent.decoder.get_obs_from_z1(z['z1_mean'])
-                obs_from_z2 = agent.decoder.get_obs_from_z2(z['z2_mean'])
-                obs_from_z3 = agent.decoder.get_obs_from_a(z['a_mean'])
-
-                psnr_z1 = psnr(obs, (utils.depreprocess_obs(obs_from_z1.squeeze(0).cpu())).byte().numpy())
-                psnr_z2 = psnr(obs, (utils.depreprocess_obs(obs_from_z2.squeeze(0).cpu())).byte().numpy())
-                psnr_z3 = psnr(obs, (utils.depreprocess_obs(obs_from_z3.squeeze(0).cpu())).byte().numpy())
-                episode_psnr_z1.append(psnr_z1)
-                episode_psnr_z2.append(psnr_z2)
-                episode_psnr_z3.append(psnr_z3)
+                for j in range(3):
+                    z_key = f'z{j+1}_mean'
+                    decoder_func = getattr(agent.decoder, f'get_obs_from_z{j+1}')
+                    obs_from_z = decoder_func(z[z_key])
+                    psnr_value = psnr(obs, (utils.depreprocess_obs(obs_from_z.squeeze(0).cpu())).byte().numpy())
+                    episode_psnr[j].append(psnr_value)
 
             obs, reward, done, _ = env.step(action)
             video.record(env)
@@ -120,10 +112,8 @@ def evaluate(env, agent, video, num_episodes, L, step, testpsnr=False):
 
         video.save('%d.mp4' % step)
         L.log('eval/episode_reward', episode_reward, step)
-        if testpsnr:
-            L.log('eval/episode_psnr_z1', np.mean(episode_psnr_z1), step)
-            L.log('eval/episode_psnr_z2', np.mean(episode_psnr_z2), step)
-            L.log('eval/episode_psnr_z3', np.mean(episode_psnr_z3), step)
+        for j in range(3):
+            L.log(f'eval/episode_psnr_z{j+1}', np.mean(episode_psnr[j]), step)
 
     L.dump(step)
 
@@ -155,7 +145,8 @@ def make_agent(obs_shape, action_shape, args, device):
             decoder_type=args.decoder_type,
             decoder_lr=args.decoder_lr,
             decoder_update_freq=args.decoder_update_freq,
-            decoder_latent_lambda=args.decoder_latent_lambda,
+            lambdaD=args.lambdaD,
+            lambdaE=args.lambdaE,
             decoder_weight_lambda=args.decoder_weight_lambda,
             num_layers=args.num_layers,
             num_filters=args.num_filters

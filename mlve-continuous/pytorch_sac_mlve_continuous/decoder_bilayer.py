@@ -1,12 +1,8 @@
 import torch
 import torch.nn as nn
 
-# from encoder import OUT_DIM
 OUT_DIM = {2: 39, 4: 35, 6: 31}
 
-"""
-    reconstruct image
-"""
 
 class PixelDecoder(nn.Module):
     def __init__(self, obs_shape, feature_dim, num_layers=2, num_filters=32):
@@ -17,14 +13,14 @@ class PixelDecoder(nn.Module):
         self.out_dim = OUT_DIM[num_layers]
         self.feature_dim = feature_dim
 
-        self.fc1 = nn.Linear(feature_dim, 48672)
-        self.fc2 = nn.Linear(feature_dim, 39200)
-        self.fa = nn.Linear(feature_dim, num_filters * self.out_dim * self.out_dim)
-
-        self.z1_mean = nn.Sequential(nn.Linear(48672, self.feature_dim),
-                                    nn.LayerNorm(self.feature_dim, elementwise_affine=False))
-        self.z2_mean = nn.Sequential(nn.Linear(39200, self.feature_dim),
-                                    nn.LayerNorm(self.feature_dim, elementwise_affine=False))
+        self.fc = []
+        self.z_mean = []
+        for i in range(3):
+            self.fc.append(nn.Linear(feature_dim, num_filters * OUT_DIM[(i+1)*2] * OUT_DIM[(i+1)*2]))
+            if i !=2:
+                # predict z1 and z2
+                self.z_mean.append(nn.Sequential(nn.Linear(num_filters * OUT_DIM[(i+1)*2] * OUT_DIM[(i+1)*2], self.feature_dim),
+                                    nn.LayerNorm(self.feature_dim, elementwise_affine=False)))
 
         self.deconvs = nn.ModuleList()
 
@@ -41,73 +37,45 @@ class PixelDecoder(nn.Module):
         self.outputs = dict()
 
     def get_obs_from_z1(self, z1):
-        h1 = torch.relu(self.fc1(z1))
-        deconv = h1.view(-1, self.num_filters, 39, 39)
+        h1 = torch.relu(self.fc[0](z1))
+        deconv = h1.view(-1, self.num_filters, OUT_DIM[2], OUT_DIM[2])
         for i in range(4, self.num_layers - 1):
             deconv = torch.relu(self.deconvs[i](deconv))
         obs = self.deconvs[-1](deconv)
         return obs
     
-    def get_obs_from_z2(self, z2):
-        h2 = self.fc2(z2)
-        deconv = h2.view(-1, self.num_filters, 35, 35)
+    def get_obs_from_z2(self, z2, forward=False):
+        h2 = self.fc[1](z2)
+        deconv = h2.view(-1, self.num_filters, OUT_DIM[4], OUT_DIM[4])
         for i in range(2, 4):
             deconv = torch.relu(self.deconvs[i](deconv))
         deconv = deconv.view(deconv.size(0), -1)
-        z1_mean = self.z1_mean(deconv)
+        z1_mean = self.z_mean[0](deconv)
+        if forward:
+            return z1_mean
         obs = self.get_obs_from_z1(z1_mean)
         return obs
     
-    def get_obs_from_a(self, a):
-        h3 = self.fa(a)
-        deconv = h3.view(-1, self.num_filters, self.out_dim, self.out_dim)
+    def get_obs_from_z3(self, z3, forward=False):
+        h3 = self.fc[2](z3)
+        deconv = h3.view(-1, self.num_filters, self.out_dim[2], self.out_dim[2])
         for i in range(0, 2):
             deconv = torch.relu(self.deconvs[i](deconv))
         deconv = deconv.view(deconv.size(0), -1)
-        z2_mean = self.z2_mean(deconv)
+        z2_mean = self.z_mean[1](deconv)
+        if forward:
+            return z2_mean
         obs = self.get_obs_from_z2(z2_mean)
         return obs
 
-    def forward(self, z1, z2, a):
+    def forward(self, z1, z2, z3):
         # p(x|z1)
-        h1 = torch.relu(self.fc1(z1))
-        deconv = h1.view(-1, self.num_filters, 39, 39)
-        for i in range(4, self.num_layers - 1):
-            deconv = torch.relu(self.deconvs[i](deconv))
-        obs = self.deconvs[-1](deconv)
-
+        obs = get_obs_from_z1(z1)
         # p(z1|z2)
-        h2 = self.fc2(z2)
-        deconv = h2.view(-1, self.num_filters, 35, 35)
-        for i in range(2, 4):
-            deconv = torch.relu(self.deconvs[i](deconv))
-        deconv = deconv.view(deconv.size(0), -1)
-        z1_mean = self.z1_mean(deconv)
-
-        # p(z2|a)
-        h3 = self.fa(a)
-        deconv = h3.view(-1, self.num_filters, self.out_dim, self.out_dim)
-        for i in range(0, 2):
-            deconv = torch.relu(self.deconvs[i](deconv))
-        deconv = deconv.view(deconv.size(0), -1)
-        z2_mean = self.z2_mean(deconv)
-
+        z1_mean = get_obs_from_z2(z2, forward=True)
+        # p(z2|z3)
+        z2_mean = get_obs_from_z3(z3, forward=True)
         return obs, z1_mean, z2_mean
-
-    def log(self, L, step, log_freq):
-        if step % log_freq != 0:
-            return
-
-        for k, v in self.outputs.items():
-            L.log_histogram('train_decoder/%s_hist' % k, v, step)
-            if len(v.shape) > 2:
-                L.log_image('train_decoder/%s_i' % k, v[0], step)
-
-        for i in range(self.num_layers):
-            L.log_param(
-                'train_decoder/deconv%s' % (i + 1), self.deconvs[i], step
-            )
-        L.log_param('train_decoder/fc', self.fc, step)
 
 
 _AVAILABLE_DECODERS = {'pixel': PixelDecoder}

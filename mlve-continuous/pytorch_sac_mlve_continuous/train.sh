@@ -5,5 +5,5 @@
     --decoder_type pixel \
     --action_repeat 4 \
     --testpsnr \
-    --work_dir ./logsave/sigm-rhvae-ssa/-8_t4 \
-    --seed 652 > ./trainlog/sigm-rhvae-ssa/-8_t4.log 2>&1 ) &
+    --work_dir ./logsave/ \
+    --seed 1 > ./trainlog/train.log 2>&1 ) &

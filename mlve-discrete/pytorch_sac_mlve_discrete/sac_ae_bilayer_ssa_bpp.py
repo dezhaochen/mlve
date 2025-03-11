@@ -52,11 +52,11 @@ class Actor(nn.Module):
     """MLP actor network."""
     def __init__(
         self, obs_shape, action_shape, hidden_dim, encoder_type,
-        encoder_feature_dim, log_std_min, log_std_max, num_layers, num_filters, qz
+        encoder_feature_dim, log_std_min, log_std_max, num_layers, num_filters, qt
     ):
         super().__init__()
 
-        self.qz = qz
+        self.qt = qt
 
         self.encoder = make_encoder(
             encoder_type, obs_shape, encoder_feature_dim, num_layers,
@@ -81,16 +81,16 @@ class Actor(nn.Module):
         N, _, H, W = obs.size()
         num_pixels = N * H * W * 3
 
-        z1_mean, z1_sigma, z2_mean, z2_sigma, z3_mean, z3_sigma = self.encoder(obs, detach=detach_encoder)
+        z1_mean, _, z2_mean, _, z3_mean, _ = self.encoder(obs, detach=detach_encoder)
         
-        obs, obs_likelihoods = self.encoder.entropy_bottleneck[2](z3_mean*self.qz[2])
-        obs = obs / self.qz[2]
+        z3m_Q, z3m_likelihoods = self.encoder.entropy_bottleneck[2](z3_mean * self.qt[2])
+        z3m_Q = z3m_Q / self.qt[2]
 
         if detach_encoder:
-            obs = obs.detach()
-            obs_likelihoods = obs_likelihoods.detach()
+            z3m_Q = z3m_Q.detach()
+            z3m_likelihoods = z3m_likelihoods.detach()
 
-        mu, log_std = self.trunk(obs).chunk(2, dim=-1)
+        mu, log_std = self.trunk(z3m_Q).chunk(2, dim=-1)
 
         log_std = torch.tanh(log_std)
         log_std = self.log_std_min + 0.5 * (
@@ -114,18 +114,18 @@ class Actor(nn.Module):
             log_pi = None
 
         mu, pi, log_pi = squash(mu, pi, log_pi)
-        
+
         if eval:
             with torch.no_grad():
-                z1m_Q, z1m_likelihoods = self.encoder.entropy_bottleneck[0](z1_mean * self.qz[0])
-                z2m_Q, z2m_likelihoods = self.encoder.entropy_bottleneck[1](z2_mean * self.qz[1])
-                z1_bpp = (torch.log(z1m_likelihoods).sum() / (-math.log(2) * num_pixels))
-                z2_bpp = (torch.log(z2m_likelihoods).sum() / (-math.log(2) * num_pixels))
-                z3_bpp = (torch.log(obs_likelihoods).sum() / (-math.log(2) * num_pixels))
-
-            z = dict(z1m_Q=z1m_Q.detach(), z2m_Q=z2m_Q.detach(), z3m_Q=(obs*self.qz[2]).detach(),
-                    z1_bpp=z1_bpp.detach(), z2_bpp=z2_bpp.detach(), z3_bpp=z3_bpp.detach())
+                z, bpp = {}, {}
+                for i in range(3):
+                    z_key = f"z{i+1}m_Q"
+                    bpp_key = f"z{i+1}_bpp"
+                    z[z_key], likelihoods = self.encoder.entropy_bottleneck[i](locals()[f"z{i+1}_mean"] * self.qt[i])
+                    bpp[bpp_key] = torch.log(likelihoods).sum() / (-math.log(2) * num_pixels)
+            z.update({k: v.detach() for k, v in bpp.items()})
             return mu, pi, log_pi, log_std, z
+
         return mu, pi, log_pi, log_std
 
 
@@ -151,11 +151,11 @@ class Critic(nn.Module):
     """Critic network, employes two q-functions."""
     def __init__(
         self, obs_shape, action_shape, hidden_dim, encoder_type,
-        encoder_feature_dim, num_layers, num_filters, qz
+        encoder_feature_dim, num_layers, num_filters, qt
     ):
         super().__init__()
 
-        self.qz = qz
+        self.qt = qt
 
         self.encoder = make_encoder(
             encoder_type, obs_shape, encoder_feature_dim, num_layers,
@@ -172,27 +172,28 @@ class Critic(nn.Module):
         self.outputs = dict()
         self.apply(weight_init)
 
-        self.heads = []
-        for i in range(3):
-            self.heads.append(nn.Sequential(
+        self.heads = [
+            nn.Sequential(
                 nn.Linear(encoder_feature_dim, encoder_feature_dim),
                 nn.PReLU(),
                 nn.Linear(encoder_feature_dim, encoder_feature_dim)
-            ).cuda())
+            ).cuda()
+            for _ in range(3)
+        ]
 
     def forward(self, obs, action, detach_encoder=False):
         # detach_encoder allows to stop gradient propogation to encoder
         _, _, _, _, z3_mean, _ = self.encoder(obs, detach=detach_encoder)
-        obs, obs_likelihoods =  self.encoder.entropy_bottleneck[2](z3_mean*self.qz[2])
-        obs = obs / self.qz[2]
+        z3m_Q, z3m_likelihoods =  self.encoder.entropy_bottleneck[2](z3_mean * self.qt[2])
+        z3m_Q = z3m_Q / self.qt[2]
 
-        q1 = self.Q1(obs, action)
-        q2 = self.Q2(obs, action)
+        q1 = self.Q1(z3m_Q, action)
+        q2 = self.Q2(z3m_Q, action)
 
         self.outputs['q1'] = q1
         self.outputs['q2'] = q2
 
-        return q1, q2, obs_likelihoods
+        return q1, q2, z3m_likelihoods
 
 
 class SacAeAgent(object):
@@ -223,11 +224,14 @@ class SacAeAgent(object):
         decoder_type='pixel',
         decoder_lr=1e-3,
         decoder_update_freq=1,
-        decoder_latent_lambda=0.0,
         decoder_weight_lambda=0.0,
         num_layers=4,
         num_filters=32,
-        qz=None
+        lambdaR = [1e-10, 1e-6, 1e-4],
+        lambdaD=1e-6,
+        lambdaE = [1e-8, 1e-4],
+        qt=None,
+        KLl=KLl,
     ):
         self.device = device
         self.discount = discount
@@ -236,23 +240,26 @@ class SacAeAgent(object):
         self.actor_update_freq = actor_update_freq
         self.critic_target_update_freq = critic_target_update_freq
         self.decoder_update_freq = decoder_update_freq
-        self.decoder_latent_lambda = decoder_latent_lambda
-        self.qz = qz
+        self.lambdaR = lambdaR
+        self.lambdaD = lambdaD
+        self.lambdaE = lambdaE
+        self.qt = qt
+        self.KLl = KLl
 
         self.actor = Actor(
             obs_shape, action_shape, hidden_dim, encoder_type,
             encoder_feature_dim, actor_log_std_min, actor_log_std_max,
-            num_layers, num_filters, qz
+            num_layers, num_filters, qt
         ).to(device)
 
         self.critic = Critic(
             obs_shape, action_shape, hidden_dim, encoder_type,
-            encoder_feature_dim, num_layers, num_filters, qz
+            encoder_feature_dim, num_layers, num_filters, qt
         ).to(device)
 
         self.critic_target = Critic(
             obs_shape, action_shape, hidden_dim, encoder_type,
-            encoder_feature_dim, num_layers, num_filters, qz
+            encoder_feature_dim, num_layers, num_filters, qt
         ).to(device)
 
         self.critic_target.load_state_dict(self.critic.state_dict())
@@ -436,24 +443,21 @@ class SacAeAgent(object):
 
         # quantization encoding and decoding
         z1eps = torch.randn_like(z1_mean)
-        z1m_Q, z1m_likelihoods =  self.critic.encoder.entropy_bottleneck[0](z1_mean*self.qz[0])
-        z1 = z1m_Q/self.qz[0] + z1eps * z1_sigma
+        z1m_Q, z1m_likelihoods =  self.critic.encoder.entropy_bottleneck[0](z1_mean*self.qt[0])
+        z1 = z1m_Q / self.qt[0] + z1eps * z1_sigma
         z2eps = torch.randn_like(z2_mean)
-        z2m_Q, z2m_likelihoods =  self.critic.encoder.entropy_bottleneck[1](z2_mean*self.qz[1])
-        z2 = z2m_Q/self.qz[1] + z2eps * z2_sigma
+        z2m_Q, z2m_likelihoods =  self.critic.encoder.entropy_bottleneck[1](z2_mean*self.qt[1])
+        z2 = z2m_Q / self.qt[1] + z2eps * z2_sigma
         z3eps = torch.randn_like(z3_mean)
-        z3m_Q, z3m_likelihoods =  self.critic.encoder.entropy_bottleneck[2](z3_mean*self.qz[2])
-        z3 = z3m_Q/self.qz[2]
+        z3m_Q, z3m_likelihoods =  self.critic.encoder.entropy_bottleneck[2](z3_mean*self.qt[2])
+        z3 = z3m_Q / self.qt[2]
 
         # hvae loss
         rec_obs, pz1_mean, pz2_mean = self.decoder(z1, z2, z3)
         rec_loss = F.mse_loss(target_obs, rec_obs)
-
         KL_z1 = torch.mean(0.5 * torch.sum((z1_mean - pz1_mean) ** 2, dim=1), dim=0)
         KL_z2 = torch.mean(0.5 * torch.sum((z2_mean - pz2_mean) ** 2, dim=1), dim=0)
-
-        self.decoder_latent_lambda = 1e-6
-        hvae_loss = rec_loss + self.decoder_latent_lambda * ((KL_z1-2)**2 + (KL_z2-22)**2)
+        hvae_loss = rec_loss + self.lambdaD * ((KL_z1 - self.KLl[0])**2 + (KL_z2 - self.KLl[1])**2)
 
         # bpp loss
         N, _, H, W = obs.size()
@@ -461,8 +465,7 @@ class SacAeAgent(object):
         z1_bpp_loss = (torch.log(z1m_likelihoods).sum() / (-math.log(2) * num_pixels))
         z2_bpp_loss = (torch.log(z2m_likelihoods).sum() / (-math.log(2) * num_pixels))
         z3_bpp_loss = (torch.log(z3m_likelihoods).sum() / (-math.log(2) * num_pixels))
-        rlambda = [1e-10, 1e-6, 1e-4]
-        bpp_loss = rlambda[0] * z1_bpp_loss + rlambda[1] * z2_bpp_loss + rlambda[2] * z3_bpp_loss
+        bpp_loss = self.lambdaR[0] * z1_bpp_loss + self.lambdaR[1] * z2_bpp_loss + self.lambdaR[2] * z3_bpp_loss
 
         # auxiliary loss
         aux_loss = self.critic.encoder.aux_loss()
@@ -481,10 +484,7 @@ class SacAeAgent(object):
                                  target_Q2) - self.alpha.detach() * log_pi
         ssa2 = self.constras_criterion(feat2, approx_action, target_V.detach(), self.device)
         ssa3 = self.constras_criterion(feat3, approx_action, target_V.detach(), self.device)
-        ssa_loss = 1e-8 * ssa2 + 1e-4 * ssa3
-        L.log('train_ae/ssa2', ssa2, step)
-        L.log('train_ae/ssa3', ssa3, step)
-        L.log('train_ae/conloss', ssa_loss, step)
+        ssa_loss = self.lambdaE[0] * ssa2 + self.lambdaE[1] * ssa3
 
         # total loss
         loss = hvae_loss + ssa_loss + bpp_loss
@@ -506,6 +506,9 @@ class SacAeAgent(object):
         L.log('train_ae/z1_bpp', z1_bpp_loss, step)
         L.log('train_ae/z2_bpp', z2_bpp_loss, step)
         L.log('train_ae/z3_bpp', z3_bpp_loss, step)
+        L.log('train_ae/ssa2', ssa2, step)
+        L.log('train_ae/ssa3', ssa3, step)
+        L.log('train_ae/conloss', ssa_loss, step)
 
     def update(self, replay_buffer, L, step):
         obs, action, reward, next_obs, not_done = replay_buffer.sample()

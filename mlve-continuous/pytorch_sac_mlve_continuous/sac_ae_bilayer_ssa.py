@@ -11,9 +11,6 @@ from decoder_bilayer import make_decoder
 
 from loss import ContrasLoss
 
-"""
-    RHVAE
-"""
 
 LOG_FREQ = 10000
 
@@ -76,18 +73,11 @@ class Actor(nn.Module):
         self.outputs = dict()
         self.apply(weight_init)
 
-        self.head = nn.Sequential(
-                nn.Linear(encoder_feature_dim, encoder_feature_dim),
-                nn.PReLU(),
-                nn.Linear(encoder_feature_dim, encoder_feature_dim)
-            )
-
     def forward(
         self, obs, compute_pi=True, compute_log_pi=True, detach_encoder=False, test=False
     ):
-        z1, z1_mean, z1_sigma, z2, z2_mean, z2_sigma, a, a_mean, z3_sigma = self.encoder(obs, detach=detach_encoder)
-        obs = a_mean
-        # obs = a
+        _, z1_mean, _, _, z2_mean, _, _, z3_mean, _ = self.encoder(obs, detach=detach_encoder)
+        obs = z3_mean
 
         mu, log_std = self.trunk(obs).chunk(2, dim=-1)
 
@@ -117,7 +107,7 @@ class Actor(nn.Module):
         
         if test:
             z = dict(z1_mean=z1_mean.detach(), 
-                    z2_mean=z2_mean.detach(), a_mean=a_mean.detach())
+                    z2_mean=z2_mean.detach(), z3_mean=z3_mean.detach())
             return mu, pi, log_pi, log_std, z
         return mu, pi, log_pi, log_std
 
@@ -182,9 +172,8 @@ class Critic(nn.Module):
 
     def forward(self, obs, action, detach_encoder=False):
         # detach_encoder allows to stop gradient propogation to encoder
-        _, _, _, _, _, _, a, a_mean, a_logvar = self.encoder(obs, detach=detach_encoder)
-        obs = a_mean
-        # obs = a
+        _, _, _, _, _, _, _, z3_mean, _ = self.encoder(obs, detach=detach_encoder)
+        obs = z3_mean
 
         q1 = self.Q1(obs, action)
         q2 = self.Q2(obs, action)
@@ -197,8 +186,6 @@ class Critic(nn.Module):
     def log(self, L, step, log_freq=LOG_FREQ):
         if step % log_freq != 0:
             return
-
-        # self.encoder.log(L, step, log_freq)
 
         for k, v in self.outputs.items():
             L.log_histogram('train_critic/%s_hist' % k, v, step)
@@ -236,7 +223,8 @@ class SacAeAgent(object):
         decoder_type='pixel',
         decoder_lr=1e-3,
         decoder_update_freq=1,
-        decoder_latent_lambda=0.0,
+        lambdaD=0.0,
+        lambdaE=0.0,
         decoder_weight_lambda=0.0,
         num_layers=4,
         num_filters=32
@@ -248,7 +236,8 @@ class SacAeAgent(object):
         self.actor_update_freq = actor_update_freq
         self.critic_target_update_freq = critic_target_update_freq
         self.decoder_update_freq = decoder_update_freq
-        self.decoder_latent_lambda = decoder_latent_lambda
+        self.lambdaD = lambdaD
+        self.lambdaE = lambdaE
 
         self.actor = Actor(
             obs_shape, action_shape, hidden_dim, encoder_type,
@@ -356,13 +345,10 @@ class SacAeAgent(object):
                                  target_Q) + F.mse_loss(current_Q2, target_Q)
         L.log('train_critic/loss', critic_loss, step)
 
-
         # Optimize the critic
         self.critic_optimizer.zero_grad()
         critic_loss.backward()
         self.critic_optimizer.step()
-
-        # self.critic.log(L, step)
 
     def update_actor_and_alpha(self, obs, L, step):
         # detach encoder, so we don't update it with the actor loss
@@ -383,8 +369,6 @@ class SacAeAgent(object):
         actor_loss.backward()
         self.actor_optimizer.step()
 
-        # self.actor.log(L, step)
-
         self.log_alpha_optimizer.zero_grad()
         alpha_loss = (self.alpha *
                       (-log_pi - self.target_entropy).detach()).mean()
@@ -394,23 +378,22 @@ class SacAeAgent(object):
         self.log_alpha_optimizer.step()
 
     def update_decoder(self, obs, target_obs, L, step, next_obs):
-        z1, z1_mean, z1_sigma, z2, z2_mean, z2_sigma, a, a_mean, z3_sigma = self.critic.encoder(obs)
+        z1, z1_mean, z1_sigma, z2, z2_mean, z2_sigma, z3, z3_mean, z3_sigma = self.critic.encoder(obs)
 
         if target_obs.dim() == 4:
             # preprocess images to be in [-0.5, 0.5] range
             target_obs = utils.preprocess_obs(target_obs)
-        rec_obs, pz1_mean, pz2_mean = self.decoder(z1, z2, a)
+        rec_obs, pz1_mean, pz2_mean = self.decoder(z1, z2, z3)
         rec_loss = F.mse_loss(target_obs, rec_obs)
 
         KL_z1 = torch.mean(0.5 * torch.sum((z1_mean - pz1_mean) ** 2, dim=1), dim=0)
         KL_z2 = torch.mean(0.5 * torch.sum((z2_mean - pz2_mean) ** 2, dim=1), dim=0)
 
-        self.decoder_latent_lambda = 1e-6
-        loss = rec_loss + self.decoder_latent_lambda * (KL_z1 + KL_z2)
+        loss = rec_loss + self.lambdaD * (KL_z1 + KL_z2)
 
         with torch.no_grad():
             _, now_action, _, _ = self.actor(obs, compute_log_pi=False)
-        states = a_mean
+        states = z3_mean
         feat = F.normalize(self.critic.head(states), dim=1)
         with torch.no_grad():
             _, policy_action, log_pi, _ = self.actor(next_obs)
@@ -419,7 +402,7 @@ class SacAeAgent(object):
                                  target_Q2) - self.alpha.detach() * log_pi
         ssa_loss = self.constras_criterion(feat, now_action, target_V.detach(), self.device)
         L.log('train_ae/conloss', ssa_loss, step)
-        loss = loss + 1e-8 * ssa_loss
+        loss = loss + lambdaE * ssa_loss
 
         self.encoder_optimizer.zero_grad()
         self.decoder_optimizer.zero_grad()
@@ -431,8 +414,6 @@ class SacAeAgent(object):
         L.log('train_ae/recon', rec_loss, step)
         L.log('train_ae/kl2', KL_z2, step)
         L.log('train_ae/kl1', KL_z1, step)
-
-        # self.decoder.log(L, step, log_freq=LOG_FREQ)
 
     def update(self, replay_buffer, L, step):
         obs, action, reward, next_obs, not_done = replay_buffer.sample()

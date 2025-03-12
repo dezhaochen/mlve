@@ -1,7 +1,7 @@
 # Code for Progressive Goal-oriented Communications for Reinforcement Learning Control over Multi-tier Computing Systems
 This repository is the implementation of MLVE. Our implementation of SAC is based on [SAC+AE](https://github.com/denisyarats/pytorch_sac_ae) by Denis Yarats.
 ## Train the MLVE codec (i.e., discrete version)
-To train the MLVE codec on the task from image-based observations, navigate to the directory: [mlve/mlve-continuous/pytorch_sac_mlve_discrete/](https://github.com/dezhaochen/mlve/tree/main/mlve-discrete/pytorch_sac_mlve_discrete). The file contains the following command, which you can modify to try different environments / hyperparamters. ```source train.sh```
+To train the MLVE codec on the task from image-based observations, navigate to the directory: [mlve/mlve-continuous/pytorch_sac_mlve_discrete/](https://github.com/dezhaochen/mlve/tree/main/mlve-discrete/pytorch_sac_mlve_discrete). The script contains the following command, which you can modify to try different environments / hyperparamters. ```source train.sh```
 ```
 python train.py \
     --domain_name cartpole \
@@ -54,7 +54,7 @@ z2/z3_LR-scl - average LR-scl at each layer
 ```
 
 ## Train the HCL agent (i.e., continuous version)
-To train an HCL agent on the task from image-based observations, navigate to the directory: [mlve/mlve-continuous/pytorch_sac_mlve_continuous/](https://github.com/dezhaochen/mlve/tree/main/mlve-continuous/pytorch_sac_mlve_continuous). The file contains the following command, which you can modify to try different environments / hyperparamters. ```source train.sh```
+To train an HCL agent on the task from image-based observations, navigate to the directory: [mlve/mlve-continuous/pytorch_sac_mlve_continuous/](https://github.com/dezhaochen/mlve/tree/main/mlve-continuous/pytorch_sac_mlve_continuous). The script contains the following command, which you can modify to try different environments / hyperparamters. ```source train.sh```
 ```
 python train.py \
     --domain_name cartpole \
@@ -66,9 +66,9 @@ python train.py \
     --work_dir ./logsave \
     --seed 1
 ```
-The output in the console is similar to that in the discrete version.
+The console output is similar to the discrete version.
 
 # Train baselines
-To train the other baselines on the task from image-based observations, navigate to the directory: [mlve/baseline/pytorch_sac_compression/](https://github.com/dezhaochen/mlve/tree/main/baseline/pytorch_sac_compression). The file contains the following command, which you can modify to try different environments / hyperparamters. ```source train.sh```
+To train the other baselines on the task from image-based observations, navigate to the directory: [mlve/baseline/pytorch_sac_compression/](https://github.com/dezhaochen/mlve/tree/main/baseline/pytorch_sac_compression). The script contains the following command, which you can modify to try different environments / hyperparamters. ```source train.sh```
 
 Compression methods could be seleted including JPEG, BPG and CompressAI through parameter ```--cp_method```. The default is to only use RL feedback for compression.

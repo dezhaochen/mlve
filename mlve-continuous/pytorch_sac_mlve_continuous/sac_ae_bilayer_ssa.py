@@ -402,7 +402,7 @@ class SacAeAgent(object):
                                  target_Q2) - self.alpha.detach() * log_pi
         ssa_loss = self.constras_criterion(feat, now_action, target_V.detach(), self.device)
         L.log('train_ae/conloss', ssa_loss, step)
-        loss = loss + lambdaE * ssa_loss
+        loss = loss + self.lambdaE * ssa_loss
 
         self.encoder_optimizer.zero_grad()
         self.decoder_optimizer.zero_grad()

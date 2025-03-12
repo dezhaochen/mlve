@@ -37,8 +37,8 @@ class PixelEncoder(nn.Module):
             self.convs.append(nn.Conv2d(num_filters, num_filters, 3, stride=1))
 
         out_dim = [OUT_DIM[2], OUT_DIM[4], OUT_DIM[6]]
-        self.z_mean = []
-        self.entropy_bottleneck = []
+        self.z_mean = nn.ModuleList()
+        self.entropy_bottleneck = nn.ModuleList()
         for i in range(3):
             self.z_mean.append(nn.Sequential(nn.Linear(num_filters * out_dim[i] * out_dim[i], self.feature_dim), 
                                     nn.LayerNorm(self.feature_dim, elementwise_affine=False)))

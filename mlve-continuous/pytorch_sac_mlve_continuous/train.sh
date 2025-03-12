@@ -5,5 +5,5 @@
     --decoder_type pixel \
     --action_repeat 4 \
     --testpsnr \
-    --work_dir ./logsave/ \
+    --work_dir ./logsave \
     --seed 1 > ./trainlog/train.log 2>&1 ) &

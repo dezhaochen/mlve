@@ -172,14 +172,14 @@ class Critic(nn.Module):
         self.outputs = dict()
         self.apply(weight_init)
 
-        self.heads = [
+        self.heads = nn.ModuleList(
             nn.Sequential(
                 nn.Linear(encoder_feature_dim, encoder_feature_dim),
                 nn.PReLU(),
                 nn.Linear(encoder_feature_dim, encoder_feature_dim)
-            ).cuda()
+            )
             for _ in range(3)
-        ]
+        ).cuda()
 
     def forward(self, obs, action, detach_encoder=False):
         # detach_encoder allows to stop gradient propogation to encoder
@@ -231,7 +231,7 @@ class SacAeAgent(object):
         lambdaD=1e-6,
         lambdaE = [1e-8, 1e-4],
         qt=None,
-        KLl=KLl,
+        KLl=[22, 2],
     ):
         self.device = device
         self.discount = discount

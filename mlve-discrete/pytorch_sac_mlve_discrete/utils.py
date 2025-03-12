@@ -200,3 +200,23 @@ class predDataset(Dataset):
         if self.transform is not None:
             img = self.transform(img)
         return img, label, nextobs
+    
+    
+class PreActModel(nn.Module):
+    def __init__(self, feat_dim, hidden_dim=32, linear=True):
+        super(PreActModel, self).__init__()
+        self.fc1 = nn.Linear(feat_dim, hidden_dim)
+        self.fc2 = nn.Linear(hidden_dim, 1)
+        self.relu = nn.ReLU(inplace=True)
+        self.linear_module = nn.Linear(feat_dim, 1)
+        self.linear = linear
+
+    def forward(self, features):
+        if self.linear:
+            x = self.linear_module(features)
+            return x
+        else:
+            x = self.fc1(features)
+            x = self.relu(x)
+            x = self.fc2(x)
+            return x

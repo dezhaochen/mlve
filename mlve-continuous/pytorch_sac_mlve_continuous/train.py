@@ -14,7 +14,6 @@ import dmc2gym
 import copy
 
 import utils
-# from logger_bilayer_Q import Logger
 from logger_bilayer import Logger
 from video import VideoRecorder
 
@@ -158,8 +157,8 @@ def make_agent(obs_shape, action_shape, args, device):
 def main():
     args = parse_args()
 
-    args.seed = np.random.randint(0, 1000)
-    print(args.seed)
+    # args.seed = np.random.randint(0, 1000)
+    # print(args.seed)
 
     utils.set_seed_everywhere(args.seed)
 

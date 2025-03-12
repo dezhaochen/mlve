@@ -13,8 +13,8 @@ class PixelDecoder(nn.Module):
         self.out_dim = [OUT_DIM[2], OUT_DIM[4], OUT_DIM[6]]
         self.feature_dim = feature_dim
 
-        self.fc = []
-        self.z_mean = []
+        self.fc = nn.ModuleList()
+        self.z_mean = nn.ModuleList()
         for i in range(3):
             self.fc.append(nn.Linear(feature_dim, num_filters * OUT_DIM[(i+1)*2] * OUT_DIM[(i+1)*2]))
             if i !=2:
@@ -70,11 +70,11 @@ class PixelDecoder(nn.Module):
 
     def forward(self, z1, z2, z3):
         # p(x|z1)
-        obs = get_obs_from_z1(z1)
+        obs = self.get_obs_from_z1(z1)
         # p(z1|z2)
-        z1_mean = get_obs_from_z2(z2, forward=True)
+        z1_mean = self.get_obs_from_z2(z2, forward=True)
         # p(z2|z3)
-        z2_mean = get_obs_from_z3(z3, forward=True)
+        z2_mean = self.get_obs_from_z3(z3, forward=True)
         return obs, z1_mean, z2_mean
 
 

@@ -94,7 +94,7 @@ def parse_args():
     return args
 
 
-def evaluate(env, agent, video, num_episodes, L, step, testpsnr=False, q=False):
+def evaluate(env, agent, video, num_episodes, L, step):
     zmQ_list = [[] for _ in range(3)]
     action_list, nextobs_list = [], []
     for i in range(num_episodes):
@@ -107,17 +107,17 @@ def evaluate(env, agent, video, num_episodes, L, step, testpsnr=False, q=False):
     
         while not done:
             with utils.eval_mode(agent):
-                action, z = agent.select_action(obs, test=True)
+                action, z = agent.select_action(obs, eval=True)
+                action_list.append(action)
                 for j in range(3):
                     zmQ_key = f'z{j+1}m_Q'
                     bpp_key = f'z{j+1}_bpp'
                     decoder_func = getattr(agent.decoder, f'get_obs_from_z{j+1}')
-                    
                     zmQ_list[j].append(z[zmQ_key])
                     # bpp
                     episode_bpp[j].append(z[bpp_key].cpu()) 
                     # PSNR
-                    obs_from_z = decoder_func(z[zmQ_key] / qt[j])
+                    obs_from_z = decoder_func(z[zmQ_key] / agent.qt[j])
                     psnr_value = psnr(obs, (utils.depreprocess_obs(obs_from_z.squeeze(0).cpu())).byte().numpy())
                     episode_psnr[j].append(psnr_value)
 
@@ -133,6 +133,7 @@ def evaluate(env, agent, video, num_episodes, L, step, testpsnr=False, q=False):
             L.log(f'eval/episode_bpp_z{j+1}', np.mean(episode_bpp[j]), step)
 
     L = pred_act(zmQ_list, action_list, nextobs_list, L, step, agent)
+
     L.dump(step)
 
 
@@ -276,7 +277,7 @@ def main():
             # evaluate agent periodically
             if step % args.eval_freq == 0:
                 L.log('eval/episode', episode, step)
-                evaluate(env, agent, video, args.num_eval_episodes, L, step, testpsnr=args.testpsnr, q=args.q)
+                evaluate(env, agent, video, args.num_eval_episodes, L, step)
                 if args.save_model:
                     agent.save(model_dir, step)
                 if args.save_buffer:

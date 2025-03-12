@@ -151,8 +151,8 @@ def make_agent(obs_shape, action_shape, args, device):
 def main():
     args = parse_args()
 
-    args.seed = np.random.randint(0, 1000)
-    print(args.seed)
+    # args.seed = np.random.randint(0, 1000)
+    # print(args.seed)
 
     if args.cp_method == 'compressai':
         net = cheng2020_anchor(quality=args.quality, pretrained=True).eval().to(device)

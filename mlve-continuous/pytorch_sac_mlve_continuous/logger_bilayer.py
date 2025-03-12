@@ -14,15 +14,15 @@ FORMAT_CONFIG = {
             ('episode', 'E', 'int'), ('step', 'S', 'int'),
             ('duration', 'D', 'time'), ('episode_reward', 'R', 'float'),
             ('batch_reward', 'BR', 'float'), ('actor_loss', 'ALOSS', 'float'),
-            ('critic_loss', 'CLOSS', 'float'), ('critic_conloss', 'CONLOSS', 'float'), 
+            ('critic_loss', 'CLOSS', 'float'),# ('critic_conloss', 'CONLOSS', 'float'), 
             ('ae_loss', 'RLOSS', 'float'), ('ae_recon', 'rec', 'float'), 
-            ('ae_kl2', 'kl2', 'float'), ('ae_kl1', 'kl1', 'float'), 
+            ('ae_kl1', 'kl1', 'float'), ('ae_kl2', 'kl2', 'float'), 
             # ('ae_sigma1', 'sigma1', 'float'), ('ae_sigma2', 'sigma2', 'float'), ('ae_sigma3', 'sigma3', 'float'),
             # ('ae_L2', 'L2', 'float'),
             ('ae_loss', 'actloss', 'float')
         ],
         'eval': [('step', 'S', 'int'), ('episode_reward', 'ER', 'float'), 
-            ('episode_psnr_z1', 'PSNR_z1', 'float'), ('episode_psnr_z2', 'PSNR_z2', 'float'), ('episode_psnr_z3', 'PSNR_z3', 'float')]
+            ('episode_psnr_z1', 'z1_PSNR', 'float'), ('episode_psnr_z2', 'z1_PSNR', 'float'), ('episode_psnr_z3', 'z3_PSNR', 'float')]
     }
 }
 

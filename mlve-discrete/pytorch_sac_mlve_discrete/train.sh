@@ -10,4 +10,4 @@
     --qt 1000 100 1 \
     --KLl 22 2 \
     --work_dir ./logsave/ \
-    --seed 1 > ./trainlog/bpp-100-4-task-5-4-KL-22-2.log 2>&1 ) &
+    --seed 1 > ./trainlog/train.log 2>&1 ) &

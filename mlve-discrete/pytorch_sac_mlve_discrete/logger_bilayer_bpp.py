@@ -15,17 +15,17 @@ FORMAT_CONFIG = {
             ('episode', 'E', 'int'), ('step', 'S', 'int'),
             ('duration', 'D', 'time'), ('episode_reward', 'R', 'float'),
             ('batch_reward', 'BR', 'float'), ('actor_loss', 'ALOSS', 'float'),
-            ('critic_loss', 'CLOSS', 'float'), ('critic_conloss', 'CONLOSS', 'float'), 
-            ('ae_loss', 'RLOSS', 'float'), ('ae_recon', 'rec', 'float'), 
-            ('ae_kl2', 'kl2', 'float'), ('ae_kl1', 'kl1', 'float'), 
+            ('critic_loss', 'CLOSS', 'float'),# ('critic_conloss', 'CONLOSS', 'float'), 
+            ('ae_loss', 'DLOSS', 'float'), ('ae_recon', 'rec', 'float'), 
+            ('ae_kl1', 'kl1', 'float'), ('ae_kl2', 'kl2', 'float'), 
             ('ae_aux', 'aux', 'float'), 
-            ('ae_z1_bpp', 'z1bpp', 'float'), ('ae_z2_bpp', 'z2bpp', 'float'), ('ae_z3_bpp', 'z3_bpp', 'float'), 
-            ('ae_ssa2', 'ssa2', 'float'), ('ae_ssa3', 'ssa3', 'float'), ('ae_conloss', 'conloss', 'float')
+            ('ae_z1_bpp', 'z1_bpp', 'float'), ('ae_z2_bpp', 'z2_bpp', 'float'), ('ae_z3_bpp', 'z3_bpp', 'float'), 
+            ('ae_ssa2', 'z2_LR-scl', 'float'), ('ae_ssa3', 'z3_LR-scl', 'float'), ('ae_conloss', 'conloss', 'float')
         ],
         'eval': [('step', 'S', 'int'), ('episode_reward', 'ER', 'float'), 
-            ('episode_psnr_z1', 'PSNR_z1', 'float'), ('episode_psnr_z2', 'PSNR_z2', 'float'), ('episode_psnr_z3', 'PSNR_z3', 'float'), 
-            ('episode_bpp_z1', 'bpp_z1', 'float'), ('episode_bpp_z2', 'bpp_z2', 'float'), ('episode_bpp_z3', 'bpp_z3', 'float'),
-            ('ssa2', 'ssa2', 'float'), ('ssa3', 'ssa3', 'float'),]
+            ('episode_psnr_z1', 'z1_PSNR', 'float'), ('episode_psnr_z2', 'z2_PSNR', 'float'), ('episode_psnr_z3', 'z3_PSNR', 'float'), 
+            ('episode_bpp_z1', 'z1_bpp', 'float'), ('episode_bpp_z2', 'z2_bpp', 'float'), ('episode_bpp_z3', 'z3_bpp', 'float'),
+            ('ssa2', 'z2_LR-scl', 'float'), ('ssa3', 'z3_LR-scl', 'float'),]
     }
 }
 
